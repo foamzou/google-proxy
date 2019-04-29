@@ -26,6 +26,7 @@ const replaceRude = [
     'www.gstatic.com',
     'fonts.googleapis.com',
     'www.youtube.com',
+    'apis.google.com',
 ];
 
 const bodyReplacer = (body, url = undefined) => {
@@ -53,8 +54,8 @@ const bodyReplacer = (body, url = undefined) => {
     if (url !== undefined && url.indexOf('g.foamzou.com/origin_') !== -1 && (body.indexOf('src="/') !== -1 || body.indexOf('href="/') !== -1)) {
         let hostChunk = url.split('/');
         let baseHost = hostChunk[0] + '/' + hostChunk[1] + '/' + hostChunk[2] + '/' + hostChunk[3];
-        body = body.replace(/src="\/[^/]/g, `src="${baseHost}/`);
-        body = body.replace(/href="\/[^/]/g, `href="${baseHost}/`);
+        body = body.replace(/src\s*=\s*"\/[^/]/g, `src="${baseHost}/`);
+        body = body.replace(/href\s*=\s*"\/[^/]/g, `href="${baseHost}/`);
     }
 
     return body;
@@ -79,7 +80,19 @@ const parseUrl = (url) => {
             delete urlChunk[3];
         }
     }
-    return urlChunk.join('/').replace('g.foamzou.com', 'www.google.com');
+    url = urlChunk.join('/').replace('g.foamzou.com', 'www.google.com');
+    if (url.indexOf('sorry/index?continue=') !== -1) {
+        url = url.replace('origin_g_www%2F', '').replace('origin_g_www/', '');
+    }
+    return url;
+}
+
+const hackDomainFromCookie = (cookie) => {
+    if (!cookie) {
+        return '';
+    }
+    cookie = cookie.replace(/path=(.+?);/g, 'path=/;');
+    return cookie.replace(/domain=(.+?)([,;])/g, 'domain=.foamzou.com$2');
 }
 
 async function fetchAndApply(request) {
@@ -90,20 +103,37 @@ async function fetchAndApply(request) {
     const newRequest = new Request(url, request);
 
     if (url.split('/').pop().split('#')[0].split('?')[0].match(/\.png$|\.jpg$|\.jpeg$|\.gif$/) === null) {
-        const response = await fetch(newRequest);
-        const body = await response.text();
-
+        let response = await fetch(newRequest);
+        let cookie = response.headers.get('Set-Cookie');
+        cookie = hackDomainFromCookie(cookie)
         if (response.status == 301 || response.status == 302) {
-            console.log('-----------------------------------------' + response.status)
             console.log(response.headers.get('location'));
             let redirectUrl = bodyReplacer(response.headers.get('location'));
-            console.log(redirectUrl);
-            return Response.redirect(redirectUrl);
+            
+            let newResponse = new Response(response.body, response);
+            newResponse.headers.set('Set-Cookie', cookie);
+            newResponse.headers.set('location', redirectUrl);
+            newResponse.headers.set('foamtest', redirectUrl);
+            return newResponse;
         }
 
-        return new Response(bodyReplacer(body, request.url), response);
+        let body = await response.text();
+        if (body) {
+            let newResponse = new Response(bodyReplacer(body, request.url), response);
+            newResponse.headers.set('Set-Cookie', cookie);
+            return newResponse;
+        } else {
+            let newResponse = new Response(null, response);
+            newResponse.headers.set('Set-Cookie', cookie);
+            return newResponse;
+        }
     }
 
     return fetch(newRequest);
 }
 
+
+
+let url = 'https://g.foamzou.com/origin_g_www/sorry/index?continue=https://g.foamzou.com/origin_g_www/xxx';
+
+console.log(parseUrl(url))
