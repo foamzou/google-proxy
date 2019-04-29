@@ -131,9 +131,3 @@ async function fetchAndApply(request) {
 
     return fetch(newRequest);
 }
-
-
-
-let url = 'https://g.foamzou.com/origin_g_www/sorry/index?continue=https://g.foamzou.com/origin_g_www/xxx';
-
-console.log(parseUrl(url))
